@@ -20,9 +20,10 @@
 import cv_bridge
 import numpy as np
 import rclpy
+import time
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CompressedImage
 from ultralytics import YOLO
 from vision_msgs.msg import Detection2D, Detection2DArray, ObjectHypothesisWithPose
 from ultralytics_ros.msg import YoloResult
@@ -65,19 +66,41 @@ class TrackerNode(Node):
         result_image_topic = (
             self.get_parameter("result_image_topic").get_parameter_value().string_value
         )
-        self.create_subscription(Image, input_topic, self.image_callback, 1)
+
+        im_topic_type = self.wait_for_topic_type(input_topic, timeout=5.0)
+        if im_topic_type == 'sensor_msgs/msg/CompressedImage':
+            self.create_subscription(CompressedImage, input_topic, self.compressed_image_callback, 1)
+        elif im_topic_type == 'sensor_msgs/msg/Image':
+            self.create_subscription(Image, input_topic, self.image_callback, 1)
+        else:
+            self.get_logger().error(f"Unsupported image topic type: {im_topic_type}")
+            raise ValueError(f"Unsupported image topic type: {im_topic_type}")
+
         self.results_pub = self.create_publisher(YoloResult, result_topic, 1)
         self.result_image_pub = self.create_publisher(Image, result_image_topic, 1)
 
+    def wait_for_topic_type(self, topic_name, timeout=5.0):     
+        start_time = time.time()
+        while (time.time() - start_time) < timeout:
+            for name, types in self.get_topic_names_and_types():
+                if name == topic_name:
+                    return types[0]
+            time.sleep(0.1)
+        return ''
+
     def image_callback(self, msg):
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        self.process_im(cv_image, msg.header)
 
+    def compressed_image_callback(self, msg):
+        cv_image = self.bridge.compressed_imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        self.process_im(cv_image, msg.header)
+
+    def process_im(self, cv_image, header):
         conf_thres = self.get_parameter("conf_thres").get_parameter_value().double_value
         iou_thres = self.get_parameter("iou_thres").get_parameter_value().double_value
         max_det = self.get_parameter("max_det").get_parameter_value().integer_value
-        classes = (
-            self.get_parameter("classes").get_parameter_value().integer_array_value
-        )
+        classes = self.get_parameter("classes").get_parameter_value().integer_array_value
         tracker = self.get_parameter("tracker").get_parameter_value().string_value
         device = self.get_parameter("device").get_parameter_value().string_value or None
         results = self.model.track(
@@ -95,8 +118,8 @@ class TrackerNode(Node):
         if results is not None:
             yolo_result_msg = YoloResult()
             yolo_result_image_msg = Image()
-            yolo_result_msg.header = msg.header
-            yolo_result_image_msg.header = msg.header
+            yolo_result_msg.header = header
+            yolo_result_image_msg.header = header
             yolo_result_msg.detections = self.create_detections_array(results)
             yolo_result_image_msg = self.create_result_image(results)
             if self.use_segmentation:
