@@ -17,6 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import cv2
 import cv_bridge
 import numpy as np
 import rclpy
@@ -97,6 +98,7 @@ class TrackerNode(Node):
         self.process_im(cv_image, msg.header)
 
     def process_im(self, cv_image, header):
+        cv_image = cv2.rotate(cv_image, cv2.ROTATE_180)
         conf_thres = self.get_parameter("conf_thres").get_parameter_value().double_value
         iou_thres = self.get_parameter("iou_thres").get_parameter_value().double_value
         max_det = self.get_parameter("max_det").get_parameter_value().integer_value

@@ -58,10 +58,20 @@ void TrackerWithCloudNode::syncCallback(const sensor_msgs::msg::CameraInfo::Cons
   rclcpp::Duration callback_interval = current_call_time - last_call_time_;
   last_call_time_ = current_call_time;
 
+  auto rotated_info = *camera_info_msg;
+  double width = rotated_info.width;
+  double height = rotated_info.height;
+
+  // Flip the optical center (cx, cy)
+  rotated_info.k[2] = width - camera_info_msg->k[2];
+  rotated_info.k[5] = height - camera_info_msg->k[5];
+  rotated_info.p[2] = width - camera_info_msg->p[2];
+  rotated_info.p[6] = height - camera_info_msg->p[6];
+
+  cam_model_.fromCameraInfo(rotated_info);
+
   pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud(new pcl::PointCloud<pcl::PointXYZ>());
   downsampled_cloud = downsampleCloudMsg(cloud_msg);
-
-  cam_model_.fromCameraInfo(camera_info_msg);
 
   pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZ>());
   transformed_cloud = cloud2TransformedCloud(downsampled_cloud, cloud_msg->header.frame_id, cam_model_.tfFrame(),
