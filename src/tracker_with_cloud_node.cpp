@@ -154,15 +154,21 @@ void TrackerWithCloudNode::processPointsWithBbox(const pcl::PointCloud<pcl::Poin
                                                  const vision_msgs::msg::Detection2D& detection2d_msg,
                                                  pcl::PointCloud<pcl::PointXYZ>::Ptr& detection_cloud_raw)
 {
+  double width = cam_model_.fullResolution().width;
+  double height = cam_model_.fullResolution().height;
+
   for (const auto& point : cloud->points)
   {
     cv::Point3d pt_cv(point.x, point.y, point.z);
     cv::Point2d uv = cam_model_.project3dToPixel(pt_cv);
 
-    if (point.z > 0 && uv.x > 0 && uv.x >= detection2d_msg.bbox.center.position.x - detection2d_msg.bbox.size_x / 2 &&
-        uv.x <= detection2d_msg.bbox.center.position.x + detection2d_msg.bbox.size_x / 2 &&
-        uv.y >= detection2d_msg.bbox.center.position.y - detection2d_msg.bbox.size_y / 2 &&
-        uv.y <= detection2d_msg.bbox.center.position.y + detection2d_msg.bbox.size_y / 2)
+    double flipped_u = width - uv.x;
+    double flipped_v = height - uv.y;
+
+    if (point.z > 0 && flipped_u > 0 && flipped_u >= detection2d_msg.bbox.center.position.x - detection2d_msg.bbox.size_x / 2 &&
+        flipped_u <= detection2d_msg.bbox.center.position.x + detection2d_msg.bbox.size_x / 2 &&
+        flipped_v >= detection2d_msg.bbox.center.position.y - detection2d_msg.bbox.size_y / 2 &&
+        flipped_v <= detection2d_msg.bbox.center.position.y + detection2d_msg.bbox.size_y / 2)
     {
       detection_cloud_raw->points.push_back(point);
     }
@@ -185,14 +191,20 @@ void TrackerWithCloudNode::processPointsWithMask(const pcl::PointCloud<pcl::Poin
     return;
   }
 
+  double width = cam_model_.fullResolution().width;
+  double height = cam_model_.fullResolution().height;
+
   for (const auto& point : cloud->points)
   {
     cv::Point3d pt_cv(point.x, point.y, point.z);
     cv::Point2d uv = cam_model_.project3dToPixel(pt_cv);
 
-    if (point.z > 0 && uv.x >= 0 && uv.x < cv_ptr->image.cols && uv.y >= 0 && uv.y < cv_ptr->image.rows)
+    double flipped_u = width - uv.x;
+    double flipped_v = height - uv.y;
+
+    if (point.z > 0 && flipped_u >= 0 && flipped_u < cv_ptr->image.cols && flipped_v >= 0 && flipped_v < cv_ptr->image.rows)
     {
-      if (cv_ptr->image.at<uchar>(cv::Point(uv.x, uv.y)) > 0)
+      if (cv_ptr->image.at<uchar>(cv::Point(flipped_u, flipped_v)) > 0)
       {
         detection_cloud_raw->points.push_back(point);
       }
